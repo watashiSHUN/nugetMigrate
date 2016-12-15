@@ -4,6 +4,7 @@ import subprocess
 import os
 import requests
 import xml.etree.ElementTree as etree
+import io
 
 feedUrl = 'http://www.siteextensions.net/api/v2'
 siteExtensionTag = 'siteextension'
@@ -12,6 +13,7 @@ nuget = 'nuget.exe'
 def editNupkg(listTuples):
     if not os.path.exists('uploads'):
         os.makedirs('uploads')
+        inMemoryFile = io.BytesIO() # use in memory file object so we can append xml declaration
         for packageId,version in listTuples:
             downloadName = packageId+'.'+version+'.nupkg' # sometimes
             nuspecName = packageId+'.nuspec'
@@ -28,7 +30,7 @@ def editNupkg(listTuples):
                         xmlns = {'d':root.tag[1:root.tag.index('}')]}#{http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd}package
                         metaData = root.find('d:metadata',xmlns)
                         siblingTail = metaData[0].tail
-                        # insert at position 1
+                        # insert at position 0
                         # add packageType
                         packageTypes = etree.Element('packageTypes')
                         packageTypes.text = siblingTail+'  '
@@ -42,13 +44,17 @@ def editNupkg(listTuples):
                             tags.text = ''
                             tags.tail = siblingTail
                             metaData.insert(0,tags)
-                        if not siteExtensionTag in tags.text:
+                        if not siteExtensionTag in tags.text.lower(): # case insensitive
                             #TODO nodediag.nuspec has tag SiteExtension
                             tagsList = tags.text.split()
                             tagsList.append(siteExtensionTag)
                             tags.text = ' '.join(tagsList)
-
-                        upload.writestr(nuspecName,etree.tostring(root))
+                        inMemoryFile.seek(0,0)#typewriter, set to head before read
+                        tree.write(inMemoryFile,xml_declaration=True)
+                        inMemoryFile.truncate()#resize inMemoryFile
+                        inMemoryFile.seek(0,0)#typewriter, set to head before write
+                        upload.writestr(nuspecName,inMemoryFile.read())
+        inMemoryFile.close()
 
 def downLoadPackages():
     output = subprocess.check_output(['nuget.exe','list','-source',feedUrl],universal_newlines=True) # does not always return the same thing
@@ -69,6 +75,7 @@ def downLoadPackages():
                 r = requests.get(requestUrl)
             with open('packages/'+downloadName,'wb') as f:
                 f.write(r.content)
+                #TODO FIXME in memory file is gona be quite big
     return listTuples
 
 def downLoadNuget():
@@ -86,4 +93,4 @@ def publishPackages():
 
 downLoadNuget()
 editNupkg(downLoadPackages())
-publishPackages()
+#publishPackages()
