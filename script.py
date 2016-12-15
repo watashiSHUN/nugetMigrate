@@ -78,5 +78,12 @@ def downLoadNuget():
         with open(nuget,'wb') as f:
             f.write(r.content)
 
+def publishPackages():
+    # need to setapikey beforehand
+    for fname in os.listdir('uploads'):
+        subprocess.run(['nuget.exe','push','uploads/'+fname,'-source','https://www.myget.org/F/shunsiteextensiontest/api/v2'])
+        #nuget push SamplePackage.1.0.0.nupkg <your access token> -Source https://www.myget.org/F/shunsiteextensiontest/api/v2/package
+
 downLoadNuget()
 editNupkg(downLoadPackages())
+publishPackages()
