@@ -69,7 +69,6 @@ def downLoadPackages():
                 r = requests.get(requestUrl)
             with open('packages/'+downloadName,'wb') as f:
                 f.write(r.content)
-                #TODO multithreads, while its downloading, edit the file
     return listTuples
 
 def downLoadNuget():
