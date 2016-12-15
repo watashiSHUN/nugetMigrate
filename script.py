@@ -7,6 +7,7 @@ import xml.etree.ElementTree as etree
 
 feedUrl = 'http://www.siteextensions.net/api/v2'
 siteExtensionTag = 'siteextension'
+nuget = 'nuget.exe'
 
 def editNupkg(listTuples):
     if not os.path.exists('uploads'):
@@ -71,4 +72,12 @@ def downLoadPackages():
                 #TODO multithreads, while its downloading, edit the file
     return listTuples
 
+def downLoadNuget():
+    if not os.path.exists(nuget):
+        r = requests.get('https://dist.nuget.org/win-x86-commandline/latest/nuget.exe')
+        print('try to download nuget.exe, status code: '+str(r.status_code),flush=True)
+        with open(nuget,'wb') as f:
+            f.write(r.content)
+
+downLoadNuget()
 editNupkg(downLoadPackages())
