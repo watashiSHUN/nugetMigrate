@@ -8,21 +8,51 @@ import io
 
 feedUrl = 'http://www.siteextensions.net/api/v2'
 siteExtensionTag = 'siteextension'
+packageTypeName = 'AzureSiteExtension'
 nuget = 'nuget.exe'
 
-def editNupkg(listTuples):
+def printGreen(string,end="",flush=True):
+    CSI="\x1B["
+    reset=CSI+"m"
+    print(CSI+"32m" + string + CSI + "0m", end=end, flush=flush)
+
+def printRed(string,end="",flush=True):
+    CSI="\x1B["
+    reset=CSI+"m"
+    print(CSI+"31m" + string + CSI + "0m", end=end, flush=flush)
+
+def downLoadPackages():
+    output = subprocess.check_output(['nuget.exe','list','-source',feedUrl],universal_newlines=True) # does not always return the same thing
+    listTuples = [lines.split() for lines in output.splitlines()]
+    while listTuples[0][1] != '2.2.0':
+        # stupid solution
+        output = subprocess.check_output(['nuget.exe','list','-source',feedUrl],universal_newlines=True)
+        listTuples = [lines.split() for lines in output.splitlines()]
     if not os.path.exists('uploads'):
         os.makedirs('uploads')
         inMemoryFile = io.BytesIO() # use in memory file object so we can append xml declaration
         for packageId,version in listTuples:
-            downloadName = packageId+'.'+version+'.nupkg' # sometimes
-            nuspecName = packageId+'.nuspec'
-            with zipfile.ZipFile('packages/'+downloadName) as download:
-                with zipfile.ZipFile('uploads/'+downloadName,'w') as upload:
+            requestUrl = feedUrl+'/package/'+packageId+'/'+version
+            printGreen('download nuget package from: ')
+            print(requestUrl,flush=True)
+            r = requests.get(requestUrl)
+            while not r.status_code == requests.codes.ok:
+                printRed('request status code: '+r.status_code + ' retrying...',end=os.linesep)
+                r = requests.get(requestUrl)
+            # r.content already uses memory
+            #maybe multithreading isn't a good idea since memory can explod
+            with zipfile.ZipFile(io.BytesIO(r.content)) as download:
+                nuspecName = packageId+'.nuspec'
+                uploadName = packageId+'.'+version+'.nupkg'
+                with zipfile.ZipFile('uploads/'+uploadName,'w') as upload:
+                    printGreen('writing to ')
+                    print(uploadName,flush=True)
                     for zipI in download.infolist(): # zipinfo has compression type
                         if zipI.filename != nuspecName:
                             upload.writestr(zipI,download.read(zipI.filename))#not zipped
                     with download.open(nuspecName) as f:
+                        printGreen('create ')
+                        print(nuspecName,flush=True)
                         # edit nuspec
                         tree = etree.parse(f)
                         root = tree.getroot()
@@ -34,7 +64,7 @@ def editNupkg(listTuples):
                         # add packageType
                         packageTypes = etree.Element('packageTypes')
                         packageTypes.text = siblingTail+'  '
-                        packageType = etree.SubElement(packageTypes,'packageType',attrib={'name':'AzureSiteExtension'})
+                        packageType = etree.SubElement(packageTypes,'packageType',attrib={'name':packageTypeName})
                         packageType.tail = siblingTail
                         packageTypes.tail = siblingTail
                         metaData.insert(0,packageTypes)
@@ -56,28 +86,6 @@ def editNupkg(listTuples):
                         upload.writestr(nuspecName,inMemoryFile.read())
         inMemoryFile.close()
 
-def downLoadPackages():
-    output = subprocess.check_output(['nuget.exe','list','-source',feedUrl],universal_newlines=True) # does not always return the same thing
-    listTuples = [lines.split() for lines in output.splitlines()]
-    while listTuples[0][1] != '2.2.0':
-        # stupid solution
-        output = subprocess.check_output(['nuget.exe','list','-source',feedUrl],universal_newlines=True)
-        listTuples = [lines.split() for lines in output.splitlines()]
-    if not os.path.exists('packages'):
-        os.makedirs('packages')
-        for packageId,version in listTuples:
-            requestUrl = feedUrl+'/package/'+packageId+'/'+version
-            print(requestUrl,flush=True)
-            downloadName = packageId+'.'+version+'.nupkg'
-            r = requests.get(requestUrl)
-            while not r.status_code == requests.codes.ok:
-                print('request status code: '+r.status_code + ' retrying...')
-                r = requests.get(requestUrl)
-            with open('packages/'+downloadName,'wb') as f:
-                f.write(r.content)
-                #TODO FIXME in memory file is gona be quite big
-    return listTuples
-
 def downLoadNuget():
     if not os.path.exists(nuget):
         r = requests.get('https://dist.nuget.org/win-x86-commandline/latest/nuget.exe')
@@ -92,5 +100,5 @@ def publishPackages():
         #nuget push SamplePackage.1.0.0.nupkg <your access token> -Source https://www.myget.org/F/shunsiteextensiontest/api/v2/package
 
 downLoadNuget()
-editNupkg(downLoadPackages())
+downLoadPackages()
 #publishPackages()
